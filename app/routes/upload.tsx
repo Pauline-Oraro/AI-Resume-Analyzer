@@ -1,7 +1,12 @@
 
 import React, { useState, type FormEvent } from 'react'
+import { useNavigate } from 'react-router';
 import FileUploader from '~/components/FileUploader';
 import Navbar from '~/components/Navbar'
+import { prepareInstructions } from '~/constants';
+import { convertPdfToImage } from '~/lib/pdf2img';
+import { usePuterStore } from '~/lib/puter';
+import { generateUUID } from '~/lib/utils';
 
 export const meta = () => ([
     {title : 'RESUME ANALYZER | UPLOAD'},
@@ -9,6 +14,10 @@ export const meta = () => ([
 ])
 
 const upload = () => {
+    const {auth, isLoading, fs, ai, kv} = usePuterStore();
+
+    const navigate = useNavigate();
+
     {/*processing the upload or not */}
     const [isProcessing, setIsProcessing]=useState(false);
 
@@ -20,19 +29,76 @@ const upload = () => {
         setFile(file);
     }
 
+    const handleAnalyze = async({companyName, jobTitle, jobDescription, file}: {companyName: string, jobTitle: string, jobDescription: string, file: File}) => {
+        {/*showing a loading animation */}
+        setIsProcessing(true);
+
+        setStatusText('Uploading the file....');
+        {/*uploading the file to puter storage */}
+        const uploadedFile = await fs.upload([file]);
+        if(!uploadedFile) return setStatusText('Error: Failed to upload file');
+
+        {/*if the file has been uploaded then move to converting the file to an image */}
+        setStatusText('Coverting to image....');
+        const imageFile = await convertPdfToImage(file);
+
+        {/*check if image file exists */}
+        if(!imageFile.file) return setStatusText('Error: Failed to convert PDF to image');
+
+        setStatusText('Uploading the image');
+        const uploadedImage = await fs.upload([imageFile.file]);
+        if(!uploadedImage) return setStatusText('Error: Failed to upload image');
+
+        setStatusText('preparing data');
+
+        const uuid = generateUUID();
+        const data = {
+            id: uuid,
+            resumePath: uploadedFile.path,
+            imagePath: uploadedImage.path,
+            companyName,
+            jobTitle,
+            jobDescription,
+            feedback: ''
+        }
+
+        await kv.set(`resume:${uuid}`, JSON.stringify(data));
+
+        setStatusText('Analyzing...');
+
+        {/*generate feedback using ai from the prepareInstructions function */}
+
+        const feedback = await ai.feedback(
+            uploadedFile.path,
+            prepareInstructions({jobTitle, jobDescription})
+        )
+
+        if (!feedback) return setStatusText('Error: Failed to analyze resume');
+
+        const feedbackText = typeof feedback.message.content === 'string'
+            ? feedback.message.content
+            : feedback.message.content[0].text
+
+            data.feedback = JSON.parse(feedbackText);
+            await kv.set(`resume:${uuid}`, JSON.stringify(data));
+            setStatusText('Analysis complete, redirecting...');
+            console.log(data);
+    }
+
     const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const form = e.currentTarget.closest('form');
         if(!form) return;
         const formData = new FormData(form);
 
-        const companyName = formData.get('company-name');
-        const jobTitle = formData.get('job-title');
-        const jobDescription = formData.get('job-description');
+        const companyName = formData.get('company-name') as string;
+        const jobTitle = formData.get('job-title') as string;
+        const jobDescription = formData.get('job-description') as string;
+        
 
-        console.log({
-            companyName, jobTitle, jobDescription, file
-        })
+        if(!file) return;
+
+        handleAnalyze({companyName, jobTitle, jobDescription, file})
     }
 
   return (
@@ -79,7 +145,7 @@ const upload = () => {
                         <div className='form-div'>
                             <label htmlFor="uploader">Upload Resume</label>
                             {/*upload pdfs*/}
-                            <FileUploader onFileSelect={handleFileSelect}/>
+                            <FileUploader onFileSelect={handleFileSelect} />
                         </div>
 
                         <button className='primary-button' type='submit'>Analyze Resume

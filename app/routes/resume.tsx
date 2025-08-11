@@ -64,7 +64,7 @@ const resume = () => {
             </Link>
         </nav>
 
-        <div className='flex flex-col items-center w-full'>
+        <div className=' feedback-section flex flex-col items-center w-full'>
                 <section>
                     <h2 className="text-4xl !text-black font-bold mb-12">Resume Review</h2>
                     {feedback && (

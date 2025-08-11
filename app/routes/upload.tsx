@@ -38,16 +38,7 @@ const upload = () => {
         const uploadedFile = await fs.upload([file]);
         if(!uploadedFile) return setStatusText('Error: Failed to upload file');
 
-        {/*if the file has been uploaded then move to converting the file to an image */}
-        setStatusText('Coverting to image....');
-        const imageFile = await convertPdfToImage(file);
-
-        {/*check if image file exists */}
-        if(!imageFile.file) return setStatusText('Error: Failed to convert PDF to image');
-
-        setStatusText('Uploading the image');
-        const uploadedImage = await fs.upload([imageFile.file]);
-        if(!uploadedImage) return setStatusText('Error: Failed to upload image');
+        
 
         setStatusText('preparing data');
 
@@ -55,7 +46,7 @@ const upload = () => {
         const data = {
             id: uuid,
             resumePath: uploadedFile.path,
-            imagePath: uploadedImage.path,
+           
             companyName,
             jobTitle,
             jobDescription,
@@ -83,6 +74,8 @@ const upload = () => {
             await kv.set(`resume:${uuid}`, JSON.stringify(data));
             setStatusText('Analysis complete, redirecting...');
             console.log(data);
+            {/*navigating to see the resume analyzer results */}
+            navigate(`/resume/${uuid}`);
     }
 
     const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
